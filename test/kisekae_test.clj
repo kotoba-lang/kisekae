@@ -1,0 +1,191 @@
+;; kisekae_test.clj — gate for the character-spec/edit/build/store contracts
+;; (ADR-2607071610).  Run:  cd kisekae && bb kisekae    (throws on failure)
+;; .clj, not .cljc — a bb/JVM-only test script (format, java Exception), never
+;; part of a consuming browser bundle; own `ns` so a whole-project lint pass
+;; doesn't see it piling vars into an ns-less context (net-babiniku's
+;; governor_test.clj precedent).
+
+(ns kisekae-test
+  (:require [clojure.edn :as cedn]
+            [kisekae.spec :as spec]
+            [kisekae.edit :as edit]
+            [kisekae.build :as build]
+            [kisekae.store :as store]
+            [vrm.vrm-types :as vt]))
+
+(def results (atom []))
+(defn check [label pass? detail]
+  (swap! results conj {:label label :pass (boolean pass?) :detail detail})
+  (boolean pass?))
+(defn throws? [f]
+  (try (f) false (catch Exception _ true)))
+
+;; ── spec: creation + validation ─────────────────────────────────────────────────────────
+(def base-url "https://example.test/base.vrm")
+(def donor-url "https://example.test/hair.vrm")
+(def s0 (spec/new-spec {:id "chr-1" :name "Test Chan" :base-vrm-url base-url}))
+
+(check "a fresh spec is valid" (spec/valid? s0) (pr-str (spec/problems s0)))
+(check "missing base url is a problem"
+       (some #{:problem/missing-base-url}
+             (spec/problems (spec/new-spec {:id "x" :name "x" :base-vrm-url nil})))
+       "ok")
+(check "a :body override is rejected (skeleton stays with the base)"
+       (some #{:problem/part-kind-not-overridable}
+             (spec/problems (assoc s0 :spec/parts
+                                   [{:part/kind :body :part/source {:vrm/url donor-url}}])))
+       "ok")
+(check "a bad material color shape is a problem"
+       (some #{:problem/material-color-not-rgba}
+             (spec/problems (assoc s0 :spec/material-edits
+                                   [{:material/index 0 :material/base-color [1 2 3]}])))
+       "ok")
+(check "overridable kinds exclude :body and :other, come from vrm.part"
+       (and (not (contains? spec/overridable-kinds :body))
+            (not (contains? spec/overridable-kinds :other))
+            (contains? spec/overridable-kinds :hair))
+       (pr-str spec/overridable-kinds))
+
+;; ── edit: ops ───────────────────────────────────────────────────────────────────────────
+(def hair-part {:part/kind :hair :part/source {:vrm/url donor-url}})
+(def s1 (edit/apply-op s0 {:op/type :op/add-part :part hair-part}))
+
+(check "add-part adds the part" (= [hair-part] (:spec/parts s1)) (pr-str (:spec/parts s1)))
+(check "add-part for the same kind REPLACES (one hair at a time)"
+       (let [other {:part/kind :hair :part/source {:vrm/url "https://example.test/hair2.vrm"}}
+             s2 (edit/apply-op s1 {:op/type :op/add-part :part other})]
+         (= [other] (:spec/parts s2)))
+       "ok")
+(check "add-part with a non-overridable kind throws"
+       (throws? #(edit/apply-op s0 {:op/type :op/add-part
+                                    :part {:part/kind :body :part/source {:vrm/url donor-url}}}))
+       "ok")
+(check "remove-part removes by kind"
+       (= [] (:spec/parts (edit/apply-op s1 {:op/type :op/remove-part :kind :hair})))
+       "ok")
+(check "rename renames"
+       (= "Neo Chan" (:spec/name (edit/apply-op s0 {:op/type :op/rename :name "Neo Chan"})))
+       "ok")
+(check "set-meta merges only the known meta keys"
+       (= {:meta/authors ["me"] :meta/license-url nil}
+          (:spec/meta (edit/apply-op s0 {:op/type :op/set-meta
+                                         :meta {:meta/authors ["me"] :evil/key 1}})))
+       "ok")
+(check "set-base-color adds an edit, same index replaces"
+       (let [a (edit/apply-op s0 {:op/type :op/set-base-color :index 0 :color [1.0 0.0 0.0 1.0]})
+             b (edit/apply-op a {:op/type :op/set-base-color :index 0 :color [0.0 1.0 0.0 1.0]})]
+         (= [{:material/index 0 :material/base-color [0.0 1.0 0.0 1.0]}]
+            (:spec/material-edits b)))
+       "ok")
+(check "an unknown op type throws (never a silent no-op)"
+       (throws? #(edit/apply-op s0 {:op/type :op/frobnicate}))
+       "ok")
+(check "every op result is still a valid spec"
+       (spec/valid? (edit/apply-ops s0 [{:op/type :op/rename :name "A"}
+                                        {:op/type :op/add-part :part hair-part}
+                                        {:op/type :op/set-base-color :index 1 :color [0 0 0 1]}]))
+       "ok")
+
+;; ── edit: history (undo/redo) ───────────────────────────────────────────────────────────
+(let [h0 (edit/new-history s0)
+      h1 (edit/push h0 {:op/type :op/rename :name "A"})
+      h2 (edit/push h1 {:op/type :op/rename :name "B"})
+      hu (edit/undo h2)
+      hr (edit/redo hu)]
+  (check "history current tracks pushes" (= "B" (:spec/name (edit/current h2))) "ok")
+  (check "undo steps back" (= "A" (:spec/name (edit/current hu))) "ok")
+  (check "redo steps forward" (= "B" (:spec/name (edit/current hr))) "ok")
+  (check "undo at the start is a no-op" (= h0 (edit/undo h0)) "ok")
+  (check "pushing after undo truncates the redo tail"
+         (let [hb (edit/push hu {:op/type :op/rename :name "C"})]
+           (and (= "C" (:spec/name (edit/current hb)))
+                (not (edit/can-redo? hb))))
+         "ok"))
+
+;; ── spec is plain EDN: round-trips through pr-str/read-string ──────────────────────────
+(check "spec round-trips as EDN"
+       (= s1 (cedn/read-string (pr-str s1)))
+       "ok")
+
+;; ── store: MemSpecStore + the pure datom mapping ────────────────────────────────────────
+(let [st (store/mem-spec-store)]
+  (store/save-spec! st s0)
+  (store/save-spec! st (assoc s1 :spec/id "chr-2"))
+  (check "fetch-spec round-trips" (= s0 (store/fetch-spec st "chr-1")) "ok")
+  (check "spec-ids preserves insertion order" (= ["chr-1" "chr-2"] (store/spec-ids st)) "ok")
+  (store/save-spec! st (assoc s0 :spec/name "renamed"))
+  (check "re-saving an id replaces, doesn't duplicate"
+         (and (= ["chr-1" "chr-2"] (store/spec-ids st))
+              (= "renamed" (:spec/name (store/fetch-spec st "chr-1"))))
+         "ok")
+  (check "saving an invalid spec throws"
+         (throws? #(store/save-spec! st (assoc s0 :spec/base {})))
+         "ok"))
+
+(check "spec->tx / entity->spec round-trip (the future kotobase store's mapping)"
+       (let [[e] (store/spec->tx s1)]
+         (and (= "chr-1" (:kisekae/id e))
+              (= s1 (store/entity->spec e))))
+       "ok")
+
+;; ── build: part selection + doc transforms on synthetic documents ──────────────────────
+;; Synthetic VrmDocuments: enough gltf structure for vrm.part/decompose's
+;; walk (nodes with :mesh, named meshes, materials) — NOT full buffer data,
+;; so the full compose->export round-trip is a follow-up integration test
+;; against a real fixture .vrm (see README), not faked here.
+(defn synthetic-doc [mesh-names]
+  (vt/vrm-document
+   {:gltf {:asset {:version "2.0"}
+           :nodes (vec (map-indexed (fn [i n] {:name n :mesh i}) mesh-names))
+           :meshes (vec (map (fn [n] {:name n :primitives [{:material 0}]}) mesh-names))
+           :materials [{:name "mat0" :pbrMetallicRoughness {:baseColorFactor [1.0 1.0 1.0 1.0]}}]
+           :textures []
+           :images []}
+    :meta (vt/vrm-meta {:name "synthetic"})}))
+
+(def base-doc (synthetic-doc ["Body" "Hair" "Face"]))
+(def donor-doc (synthetic-doc ["Hair"]))
+(def docs {base-url base-doc donor-url donor-doc})
+
+(let [{:keys [sources skeleton-base]} (build/effective-sources s1 docs)]
+  (check "override drops the base's hair, keeps body+face, appends donor hair"
+         (= [[:body base-url] [:face base-url] [:hair donor-url]]
+            (mapv (fn [{:keys [part doc]}]
+                    [(:category part) (if (identical? doc base-doc) base-url donor-url)])
+                  sources))
+         (pr-str (mapv (comp :category :part) sources)))
+  (check "skeleton-base points at the base body's source"
+         (= :body (:category (:part (nth sources skeleton-base))))
+         (str skeleton-base)))
+
+(check "an unfetched url throws" (throws? #(build/effective-sources s1 {base-url base-doc})) "ok")
+(check "a donor with no part of the requested kind throws"
+       (throws? #(build/effective-sources s1 (assoc docs donor-url (synthetic-doc ["Cloth"]))))
+       "ok")
+(check "apply-material-edits sets baseColorFactor"
+       (= [0.2 0.3 0.4 1.0]
+          (get-in (build/apply-material-edits
+                   base-doc [{:material/index 0 :material/base-color [0.2 0.3 0.4 1.0]}])
+                  [:gltf :materials 0 :pbrMetallicRoughness :baseColorFactor]))
+       "ok")
+(check "an out-of-range material edit throws"
+       (throws? #(build/apply-material-edits
+                  base-doc [{:material/index 9 :material/base-color [0 0 0 1]}]))
+       "ok")
+(check "apply-meta stamps the user's name/authors, not the base model's"
+       (let [d (build/apply-meta base-doc (assoc-in s1 [:spec/meta :meta/authors] ["someone"]))]
+         (and (= "Test Chan" (get-in d [:meta :name]))
+              (= ["someone"] (get-in d [:meta :authors]))))
+       "ok")
+(check "build-document refuses an invalid spec before touching the engine"
+       (throws? #(build/build-document (assoc s1 :spec/base {}) docs))
+       "ok")
+
+;; ── report ──────────────────────────────────────────────────────────────────────────────
+(let [rs @results pass (count (filter :pass rs)) fail (remove :pass rs)]
+  (println (format "\n  Kisekae gate: %d/%d passed" pass (count rs)))
+  (doseq [{:keys [label pass detail]} rs]
+    (println (format "   %s %-72s %s" (if pass "✓" "✗") label detail)))
+  (when (seq fail)
+    (throw (ex-info (format "Kisekae gate FAILED — %d check(s)" (count fail))
+                    {:failed (mapv :label fail)}))))
