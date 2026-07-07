@@ -43,16 +43,28 @@
 
    Dress-up resolution: the base avatar contributes every part EXCEPT the
    kinds the spec overrides; each override contributes exactly the matching
-   part from its donor document. The base's :body is always present and is
-   the skeleton compose unifies onto."
+   part from its donor document.
+
+   Skeleton anchor: every part decomposed from the SAME base document already
+   references that document's one shared armature, so ANY base part can be the
+   `:skeleton-base` compose unifies onto — it does not have to be `:body`. An
+   earlier version required a `:body` part and threw when none existed; that
+   was wrong for real avatars whose body skin classifies as `:other` rather
+   than `:body` (found against VRM Consortium's Seed-san, whose meshes
+   decompose to hair/face/other/outfit with no `:body` — net-babiniku M6
+   slice-2 compose probe, 2026-07-07). We now prefer the `:body` part as the
+   anchor when present (the most natural silhouette root) and otherwise use
+   the first base part; the only hard requirement is that the base contributes
+   at least one part (else it anchors nothing)."
   [s docs-by-url]
   (let [base-url (get-in s [:spec/base :vrm/url])
         base-doc (doc-for docs-by-url base-url)
         base-parts (part/decompose base-doc)
         overridden (spec/overridden-kinds s)
         kept-base (vec (remove #(contains? overridden (:category %)) base-parts))
-        _ (when-not (some #(= :body (:category %)) kept-base)
-            (throw (ex-info "kisekae: base VRM has no :body part" {:url base-url})))
+        _ (when (empty? kept-base)
+            (throw (ex-info "kisekae: base VRM decomposed to no usable parts"
+                            {:url base-url :decomposed (mapv :category base-parts)})))
         base-sources (mapv (fn [p] {:part p :doc base-doc}) kept-base)
         donor-sources (mapv (fn [{:part/keys [kind source]}]
                               (let [url (:vrm/url source)
@@ -61,9 +73,13 @@
                             (:spec/parts s))
         sources (into base-sources donor-sources)]
     {:sources sources
-     :skeleton-base (first (keep-indexed
-                            (fn [i {:keys [part]}] (when (= :body (:category part)) i))
-                            sources))}))
+     ;; prefer a :body base part as the anchor, else the first base part (index 0 —
+     ;; base-sources always lead `sources`, and are non-empty per the guard above).
+     :skeleton-base (or (first (keep-indexed
+                                (fn [i {:keys [part doc]}]
+                                  (when (and (identical? doc base-doc) (= :body (:category part))) i))
+                                sources))
+                        0)}))
 
 (defn apply-material-edits
   "Apply the spec's material edits onto a composed VrmDocument. Indices are
