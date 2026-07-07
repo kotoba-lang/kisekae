@@ -162,6 +162,35 @@
 (check "a donor with no part of the requested kind throws"
        (throws? #(build/effective-sources s1 (assoc docs donor-url (synthetic-doc ["Cloth"]))))
        "ok")
+
+;; ── a base whose body skin classifies as :other still composes ──────────────────────────
+;; Real avatars (VRM Consortium's Seed-san) decompose to hair/face/other/outfit with NO
+;; :body part — its body skin classifies as :other. An earlier effective-sources threw
+;; "base VRM has no :body part"; the skeleton anchor is now the first base part (all base
+;; parts share the base document's one armature), so such a base composes fine.
+(let [;; "hair"/"head"/"robo_arm"/"wear" -> hair/face/other/outfit, mirroring Seed-san's
+      ;; real decomposition (net-babiniku M6 slice-2 probe, 2026-07-07)
+      no-body-base (synthetic-doc ["hair" "head" "robo_arm" "wear"])
+      docs2 {base-url no-body-base donor-url donor-doc}
+      ;; override :outfit with the donor (donor-doc has only "Hair"->:hair, so use an
+      ;; outfit donor); simplest: override nothing, just confirm it doesn't throw + anchor
+      spec2 (spec/new-spec {:id "chr-nb" :name "NoBody" :base-vrm-url base-url})
+      {:keys [sources skeleton-base]} (build/effective-sources spec2 docs2)]
+  (check "a base with no :body part no longer throws"
+         (= 4 (count sources))
+         (pr-str (mapv (comp :category :part) sources)))
+  (check "skeleton-base falls back to the first base part when no :body exists"
+         (= 0 skeleton-base)
+         (str skeleton-base))
+  (check "the anchor is a real base-doc part (identical? base doc)"
+         (identical? no-body-base (:doc (nth sources skeleton-base)))
+         "ok"))
+
+(check "a base that decomposes to no usable parts throws"
+       (throws? #(build/effective-sources
+                  (spec/new-spec {:id "e" :name "E" :base-vrm-url base-url})
+                  {base-url (synthetic-doc [])}))
+       "ok")
 (check "apply-material-edits sets baseColorFactor"
        (= [0.2 0.3 0.4 1.0]
           (get-in (build/apply-material-edits
