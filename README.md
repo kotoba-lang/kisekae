@@ -87,7 +87,16 @@ future blendshape-weight interpolation) are `.kotoba`-expressible candidates
 
 ## Status
 
-Thin slice, real and tested (33 checks, `bb kisekae`):
+Thin slice, real and tested (45 checks, `bb kisekae`):
+
+Capability compositor increment (ADR 0002):
+
+- `kisekae.capability` — fail-closed scoped authority for asset read, compose,
+  preview, export and publish; a URL/CID alone is never authority.
+- `kisekae.compositor` — portable CLJC phase plan and Murakumo job envelope.
+- `:op/set-base` — body changes select a new skeleton anchor and force skin
+  rebind semantics; body is still not treated as an ordinary donor part.
+- `:op/set-expression` and persisted preview expression defaults.
 
 - `kisekae.spec` — character-spec document, validation (problem list, not a
   bare boolean), fetch-list derivation.
