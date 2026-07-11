@@ -87,7 +87,7 @@ future blendshape-weight interpolation) are `.kotoba`-expressible candidates
 
 ## Status
 
-Thin slice, real and tested (45 checks, `bb kisekae`):
+Thin slice, real and tested (47 checks, `bb kisekae`):
 
 Capability compositor increment (ADR 0002):
 

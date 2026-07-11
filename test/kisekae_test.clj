@@ -12,6 +12,7 @@
             [kisekae.build :as build]
             [kisekae.capability :as capability]
             [kisekae.compositor :as compositor]
+            [kotoba.lang.capability-values :as cap-values]
             [kisekae.store :as store]
             [vrm.vrm-types :as vt]))
 
@@ -257,6 +258,19 @@
        "ok")
 (check "a URL alone is never authority"
        (not (capability/capability? base-url))
+       "ok")
+(check "an unintersected requested capability is not execution authority"
+       (not (capability/capability? (cap-values/make-cap :vrm/compose "chr-1")))
+       "ok")
+(check "VRM capabilities pass canonical CACAO/local-policy intersection"
+       (= "chr-1"
+          (:cap/resource
+           (cap-values/intersect-grants
+            {:requested (cap-values/make-cap :vrm/compose :any)
+             :cacao-grants [{:grant/kind :vrm/compose :grant/resources #{"chr-1"}
+                             :grant/expires nil :grant/id "kisekae-test"}]
+             :local-policy {:policy/allow {:vrm/compose #{"chr-1"}}}
+             :now "2026-07-11"})))
        "ok")
 
 ;; ── report ──────────────────────────────────────────────────────────────────────────────

@@ -1,7 +1,8 @@
 (ns kisekae.capability
   "Fail-closed capability policy for VRM composition. URLs/CIDs are resources,
    never authority. The host supplies concrete capability values after its
-   CACAO/local-policy intersection; this namespace only consumes them.")
+   CACAO/local-policy intersection; this namespace only consumes them."
+  (:require [kotoba.lang.capability-values :as values]))
 
 (def kinds
   #{:vrm/asset-read :vrm/compose :vrm/preview :vrm/export :vrm/publish})
@@ -14,12 +15,12 @@
    :character/publish :vrm/publish})
 
 (defn capability? [x]
-  (and (map? x)
+  (and (values/capability? x)
        (contains? kinds (:cap/kind x))
-       (or (= :any (:cap/resource x))
-           (string? (:cap/resource x))
-           (and (set? (:cap/resource x)) (seq (:cap/resource x))))
-       (vector? (:cap/provenance x))))
+       (= (:cap/kind x) (get values/effect-for-kind (:cap/kind x)))
+       ;; Requested caps have no grant provenance. Only a concrete cap
+       ;; returned by canonical grant/policy intersection executes a plan.
+       (seq (:cap/provenance x))))
 
 (defn permits? [cap action resource]
   (and (capability? cap)
