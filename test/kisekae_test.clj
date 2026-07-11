@@ -10,6 +10,9 @@
             [kisekae.spec :as spec]
             [kisekae.edit :as edit]
             [kisekae.build :as build]
+            [kisekae.capability :as capability]
+            [kisekae.compositor :as compositor]
+            [kotoba.lang.capability-values :as cap-values]
             [kisekae.store :as store]
             [vrm.vrm-types :as vt]))
 
@@ -71,6 +74,10 @@
           (:spec/meta (edit/apply-op s0 {:op/type :op/set-meta
                                          :meta {:meta/authors ["me"] :evil/key 1}})))
        "ok")
+(check "set-base changes the body/skeleton anchor instead of faking a body part"
+       (= donor-url (get-in (edit/apply-op s0 {:op/type :op/set-base :url donor-url})
+                            [:spec/base :vrm/url]))
+       "ok")
 (check "set-base-color adds an edit, same index replaces"
        (let [a (edit/apply-op s0 {:op/type :op/set-base-color :index 0 :color [1.0 0.0 0.0 1.0]})
              b (edit/apply-op a {:op/type :op/set-base-color :index 0 :color [0.0 1.0 0.0 1.0]})]
@@ -79,6 +86,12 @@
        "ok")
 (check "an unknown op type throws (never a silent no-op)"
        (throws? #(edit/apply-op s0 {:op/type :op/frobnicate}))
+       "ok")
+(check "expression edits replace by preset"
+       (= [{:expression/name :happy :expression/weight 0.8}]
+          (:spec/expression-edits
+           (edit/apply-ops s0 [{:op/type :op/set-expression :expression :happy :weight 0.2}
+                               {:op/type :op/set-expression :expression :happy :weight 0.8}])))
        "ok")
 (check "every op result is still a valid spec"
        (spec/valid? (edit/apply-ops s0 [{:op/type :op/rename :name "A"}
@@ -206,8 +219,58 @@
          (and (= "Test Chan" (get-in d [:meta :name]))
               (= ["someone"] (get-in d [:meta :authors]))))
        "ok")
+(check "expression defaults are persisted for realtime preview"
+       (= {"happy" 0.75}
+          (get-in (build/apply-expression-edits
+                   base-doc [{:expression/name :happy :expression/weight 0.75}])
+                  [:gltf :extras :kisekaeExpressionDefaults]))
+       "ok")
 (check "build-document refuses an invalid spec before touching the engine"
        (throws? #(build/build-document (assoc s1 :spec/base {}) docs))
+       "ok")
+
+;; ── capability-driven compositor plan ──────────────────────────────────────
+(def output-cid "cid:bafy-output")
+(def caps [{:cap/kind :vrm/asset-read :cap/resource #{base-url donor-url} :cap/provenance ["grant:assets"]}
+           {:cap/kind :vrm/compose :cap/resource "chr-1" :cap/provenance ["grant:compose"]}
+           {:cap/kind :vrm/preview :cap/resource "chr-1" :cap/provenance ["grant:preview"]}
+           {:cap/kind :vrm/export :cap/resource output-cid :cap/provenance ["grant:export"]}
+           {:cap/kind :vrm/publish :cap/resource "ipfs:kami" :cap/provenance ["grant:publish"]}])
+(let [p (compositor/authorized-plan! caps {:spec s1 :output-resource output-cid
+                                           :preview-target :character-canvas})]
+  (check "authorized compositor plan covers fetch through VRM export"
+         (= [:asset/fetch :vrm/parse :part/decompose :skeleton/unify :mesh/compose
+             :material/apply :expression/apply :preview/render :vrm/export]
+            (mapv :phase (:plan/phases p)))
+         "ok")
+  (check "Murakumo job preserves the authorized plan and CID output"
+         (= :kisekae/compose-vrm (:job/type (compositor/murakumo-job caps p "ipfs:kami")))
+         "ok"))
+(check "missing export capability fails closed"
+       (throws? #(compositor/authorized-plan! (vec (remove (comp #{:vrm/export} :cap/kind) caps))
+                                              {:spec s1 :output-resource output-cid
+                                               :preview-target :character-canvas}))
+       "ok")
+(check "Murakumo publish destination is independently capability guarded"
+       (let [p (compositor/authorized-plan! caps {:spec s1 :output-resource output-cid
+                                                  :preview-target :character-canvas})]
+         (throws? #(compositor/murakumo-job caps p "ipfs:other")))
+       "ok")
+(check "a URL alone is never authority"
+       (not (capability/capability? base-url))
+       "ok")
+(check "an unintersected requested capability is not execution authority"
+       (not (capability/capability? (cap-values/make-cap :vrm/compose "chr-1")))
+       "ok")
+(check "VRM capabilities pass canonical CACAO/local-policy intersection"
+       (= "chr-1"
+          (:cap/resource
+           (cap-values/intersect-grants
+            {:requested (cap-values/make-cap :vrm/compose :any)
+             :cacao-grants [{:grant/kind :vrm/compose :grant/resources #{"chr-1"}
+                             :grant/expires nil :grant/id "kisekae-test"}]
+             :local-policy {:policy/allow {:vrm/compose #{"chr-1"}}}
+             :now "2026-07-11"})))
        "ok")
 
 ;; ── report ──────────────────────────────────────────────────────────────────────────────

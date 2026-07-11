@@ -10,7 +10,8 @@
  :deps {org.clojure/clojure {:mvn/version "1.12.0"}
         ;; The engine: VRM parse/decompose/compose/export, zero-dep .cljc.
         ;; Sibling-path convention, same as every kotoba-lang consumer.
-        kotoba-lang/org-vrmc-vrm {:local/root "../org-vrmc-vrm"}}
+        kotoba-lang/org-vrmc-vrm {:local/root "../org-vrmc-vrm"}
+        kotoba-lang/kotoba-lang {:local/root "../kotoba-lang"}}
 
  :aliases
  {:lint {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2024.11.14"}}

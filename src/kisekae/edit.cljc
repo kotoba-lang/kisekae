@@ -29,6 +29,11 @@
     :op/set-meta
     (update s :spec/meta merge (select-keys (:meta op) [:meta/authors :meta/license-url]))
 
+    :op/set-base
+    ;; Body/skeleton replacement is deliberately a base-avatar change, not a
+    ;; normal part override. Compose will anchor and rebind every skin to it.
+    (assoc s :spec/base {:vrm/url (:url op)})
+
     :op/add-part
     ;; One override per kind: adding a part for an already-overridden kind
     ;; replaces it (dress-up semantics — you wear one hair at a time).
@@ -50,6 +55,13 @@
               (fn [edits]
                 (conj (vec (remove #(= index (:material/index %)) edits))
                       {:material/index index :material/base-color color}))))
+
+    :op/set-expression
+    (let [{:keys [expression weight]} op]
+      (update s :spec/expression-edits
+              (fn [edits]
+                (conj (vec (remove #(= expression (:expression/name %)) edits))
+                      {:expression/name expression :expression/weight weight}))))
 
     (throw (ex-info "kisekae: unknown op type" {:op op}))))
 

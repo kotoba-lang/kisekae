@@ -40,12 +40,13 @@
    :spec/base {:vrm/url base-vrm-url}
    :spec/parts []
    :spec/material-edits []
+   :spec/expression-edits []
    :spec/meta {:meta/authors [] :meta/license-url nil}})
 
 (defn problems
   "Structural validation: spec -> seq of problem keywords (empty = valid).
    A seq (not a boolean) so an editor UI can show every issue at once."
-  [{:spec/keys [version id base parts material-edits] :as spec}]
+  [{:spec/keys [version id base parts material-edits expression-edits] :as spec}]
   (concat
    (when-not (= spec-version version) [:problem/unknown-spec-version])
    (when-not id [:problem/missing-id])
@@ -64,7 +65,11 @@
                        (every? number? base-color)))
              :problem/material-color-not-rgba
              :else nil))
-         material-edits)))
+         material-edits)
+   (keep (fn [{:expression/keys [name weight]}]
+           (when-not (and (keyword? name) (number? weight) (<= 0 weight 1))
+             :problem/expression-invalid))
+         expression-edits)))
 
 (defn valid? [spec] (empty? (problems spec)))
 

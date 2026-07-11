@@ -105,6 +105,14 @@
                                  :authors (get-in s [:spec/meta :meta/authors])
                                  :license-url (get-in s [:spec/meta :meta/license-url])})))
 
+(defn apply-expression-edits
+  "Persist editor expression defaults as glTF extras. VRM expression bindings
+   remain owned by the source documents; realtime CLJS preview applies these
+   weights to the VRM expression manager without rewriting morph targets."
+  [doc edits]
+  (assoc-in doc [:gltf :extras :kisekaeExpressionDefaults]
+            (into {} (map (juxt (comp name :expression/name) :expression/weight)) edits)))
+
 (defn build-document
   "spec + docs-by-url -> composed, edited VrmDocument."
   [s docs-by-url]
@@ -113,6 +121,7 @@
     (let [{:keys [sources skeleton-base]} (effective-sources s docs-by-url)]
       (-> (compose/compose sources {:skeleton-base skeleton-base})
           (apply-material-edits (:spec/material-edits s))
+          (apply-expression-edits (:spec/expression-edits s))
           (apply-meta s)))))
 
 (defn export-bytes
