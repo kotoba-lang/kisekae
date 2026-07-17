@@ -1,7 +1,0 @@
-;; kisekae's bb test gate. The extra path resolves only at the canonical
-;; location (orgs/kotoba-lang/kisekae, sibling to orgs/kotoba-lang/org-vrmc-vrm)
-;; — same relative-path convention deps.edn uses.
-{:paths ["test" "src" "../org-vrmc-vrm/src" "../org-khronos-glb/src" "../kotoba-lang/src"]
- :tasks
- {kisekae {:doc  "Gate for the character-spec/edit/build/store contracts (ADR-2607071610)."
-           :task (load-file "test/kisekae_test.clj")}}}
