@@ -87,7 +87,7 @@ future blendshape-weight interpolation) are `.kotoba`-expressible candidates
 
 ## Status
 
-Thin slice, real and tested (47 checks, `bb kisekae`):
+Thin slice, real and tested (47 checks, `nbb scripts/run-task.cljs kisekae`):
 
 Capability compositor increment (ADR 0002):
 
@@ -123,9 +123,17 @@ Capability compositor increment (ADR 0002):
 ## Develop
 
 ```bash
-bb kisekae          # the contract gate (33 checks; throws on failure)
-clojure -M:lint     # clj-kondo across src + test
+nbb scripts/run-task.cljs kisekae   # the contract gate (47 checks; non-zero exit on failure)
+nbb scripts/run-task.cljs lint      # clj-kondo across src + test
 ```
+
+It was `bb kisekae` until 2026-08-13. babashka was retired as this workspace's
+script host by ADR-2607173000, and that conversion left `scripts/tasks.edn` a
+literal empty registry — so the gate this README pointed at had no runnable
+entrypoint for four weeks (ADR-2608131600). It is registered again now, running
+the same `test/kisekae_test.clj` under JVM Clojure instead of babashka; measured
+2026-08-13 as `Kisekae gate: 47/47 passed`. The count in this block also said 33,
+which had been stale for some time.
 
 Requires checkout at the canonical monorepo location
 (`orgs/kotoba-lang/kisekae`, sibling to `org-vrmc-vrm` and `org-khronos-glb`)
