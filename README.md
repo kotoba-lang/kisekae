@@ -87,7 +87,7 @@ future blendshape-weight interpolation) are `.kotoba`-expressible candidates
 
 ## Status
 
-Thin slice, real and tested (47 checks, `nbb scripts/run-task.cljk kisekae`):
+Thin slice, real and tested (47 checks, `kbb --backend sci scripts/run-task.cljk kisekae`):
 
 Capability compositor increment (ADR 0002):
 
@@ -123,11 +123,11 @@ Capability compositor increment (ADR 0002):
 ## Develop
 
 ```bash
-nbb scripts/run-task.cljk kisekae   # the contract gate (47 checks; non-zero exit on failure)
-nbb scripts/run-task.cljk lint      # clj-kondo across src + test
+kbb --backend sci scripts/run-task.cljk kisekae   # the contract gate (47 checks; non-zero exit on failure)
+kbb --backend sci scripts/run-task.cljk lint      # clj-kondo across src + test
 ```
 
-It was `bb kisekae` until 2026-08-13. babashka was retired as this workspace's
+It was `kbb -M:kisekae` until 2026-08-13. babashka was retired as this workspace's
 script host by ADR-2607173000, and that conversion left `scripts/tasks.edn` a
 literal empty registry — so the gate this README pointed at had no runnable
 entrypoint for four weeks (ADR-2608131600). It is registered again now, running

@@ -1,5 +1,5 @@
 ;; kisekae_test.clj — gate for the character-spec/edit/build/store contracts
-;; (ADR-2607071610).  Run:  cd kisekae && bb kisekae    (throws on failure)
+;; (ADR-2607071610).  Run:  cd kisekae && kbb -M:kisekae    (throws on failure)
 ;; .clj, not .cljc — a bb/JVM-only test script (format, java Exception), never
 ;; part of a consuming browser bundle; own `ns` so a whole-project lint pass
 ;; doesn't see it piling vars into an ns-less context (net-babiniku's
