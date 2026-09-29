@@ -10,7 +10,7 @@
       kotobase-backed SpecStore transacts through. Production persistence is
       kotobase/datomic via the `:db-api` map (`{:q :transact! :db :pull
       :entid}`, langchain.db / langchain.kotoba-db's `kotoba-api` — per
-      CLAUDE.md's Actors doctrine, backends are spoken to ONLY through that
+      AGENTS.md's Actors doctrine, backends are spoken to ONLY through that
       map, never directly). The kotobase-backed record itself is a follow-up,
       NOT built here — but the mapping it will transact is pure, so it's
       written and tested now, and the follow-up is wiring, not design.
