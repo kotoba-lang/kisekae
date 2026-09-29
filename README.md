@@ -80,7 +80,7 @@ model serves).
 Per the repo-wide rule (kototama WASM > ClojureScript > nbb > JVM): every
 namespace here is pure, interop-free `.cljc`, executable on cljs today and in
 the kototama-compatible subset by construction. No `#?(:kototama ...)` branches
-exist anywhere — that reader feature does not exist yet (CLAUDE.md, 2026-07-06
+exist anywhere — that reader feature does not exist yet (AGENTS.md, 2026-07-06
 decision), and this library doesn't pretend otherwise. Numeric cores (e.g.
 future blendshape-weight interpolation) are `.kotoba`-expressible candidates
 *when that toolchain matures* — an aspiration recorded here, not a claim.
